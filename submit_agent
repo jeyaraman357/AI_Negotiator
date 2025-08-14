@@ -1,0 +1,20 @@
+import argparse
+from buyer_agent import YourBuyerAgent, Product, NegotiationContext
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name", required=True)
+    parser.add_argument("--email", required=True)
+    args = parser.parse_args()
+
+    print(f"Submitting project for {args.name} ({args.email})")
+    print("Running quick test with Sundar Pichai persona...")
+
+    buyer = YourBuyerAgent(name="Sundar Pichai Buyer")
+    product = Product(name="Oranges", base_market_price=80)
+    context = NegotiationContext(product=product, your_budget=100, current_round=1, max_rounds=5)
+    offer, msg = buyer.generate_opening_offer(context)
+    print(f"Opening Offer: ₹{offer} | {msg}")
+
+if __name__ == "__main__":
+    main()

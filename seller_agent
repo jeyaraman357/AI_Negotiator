@@ -1,0 +1,167 @@
+"""
+seller_agent.py
+Concordia-based Adaptive Seller Agent with Sundar Pichai persona.
+"""
+
+import json
+import random
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Tuple, Dict, Any
+from enum import Enum
+import os
+
+
+# ------------------ Data Structures ------------------
+
+@dataclass
+class Product:
+    name: str
+    base_market_price: int
+
+
+@dataclass
+class NegotiationContext:
+    product: Product
+    min_acceptable_price: int
+    current_round: int
+    max_rounds: int
+
+
+class DealStatus(Enum):
+    ONGOING = 0
+    ACCEPTED = 1
+    REJECTED = 2
+
+
+# ------------------ Base Seller Agent ------------------
+
+class BaseSellerAgent(ABC):
+    def __init__(self, name: str):
+        self.name = name
+
+    @abstractmethod
+    def define_personality(self) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def generate_opening_offer(self, context: NegotiationContext) -> Tuple[int, str]:
+        pass
+
+    @abstractmethod
+    def respond_to_buyer_offer(
+        self, context: NegotiationContext, buyer_price: int, buyer_message: str
+    ) -> Tuple[DealStatus, int, str]:
+        pass
+
+    @abstractmethod
+    def get_personality_prompt(self) -> str:
+        pass
+
+
+# ------------------ Adaptive Seller with Sundar Pichai Persona ------------------
+
+class YourSellerAgent(BaseSellerAgent):
+    def __init__(self, name: str, personality_file: str = "seller_personality_config.json"):
+        super().__init__(name)
+        self.flexibility = 0.1
+        self.opponent_moves = []
+
+        if not os.path.exists(personality_file):
+            raise FileNotFoundError(f"Personality config '{personality_file}' not found.")
+        with open(personality_file, "r", encoding="utf-8") as f:
+            self.personality = json.load(f)
+
+    def define_personality(self) -> Dict[str, Any]:
+        return self.personality
+
+    def analyze_opponent(self) -> str:
+        if len(self.opponent_moves) < 2:
+            return "neutral"
+        avg_change = sum(
+            abs(self.opponent_moves[i] - self.opponent_moves[i - 1])
+            for i in range(1, len(self.opponent_moves))
+        ) / (len(self.opponent_moves) - 1)
+        return "aggressive" if avg_change > 0.08 * self.opponent_moves[0] else "patient"
+
+    def adjust_flexibility(self, opponent_style: str) -> None:
+        if opponent_style == "aggressive":
+            self.flexibility = max(0.05, self.flexibility - 0.02)
+        elif opponent_style == "patient":
+            self.flexibility = min(0.2, self.flexibility + 0.02)
+
+    def generate_opening_offer(self, context: NegotiationContext) -> Tuple[int, str]:
+        opening_price = int(context.product.base_market_price * (1.3 + random.random() * 0.1))
+        return opening_price, (
+            f"Considering quality and demand, my starting price is ₹{opening_price:,}. "
+            f"I believe this reflects fair value."
+        )
+
+    def respond_to_buyer_offer(
+        self, context: NegotiationContext, buyer_price: int, buyer_message: str
+    ) -> Tuple[DealStatus, int, str]:
+        self.opponent_moves.append(buyer_price)
+
+        style = self.analyze_opponent()
+        self.adjust_flexibility(style)
+
+        if buyer_price >= context.min_acceptable_price and context.current_round >= 2:
+            return DealStatus.ACCEPTED, buyer_price, (
+                f"Your offer of ₹{buyer_price:,} works for me. Let's finalise this deal."
+            )
+
+        decrease_amount = context.product.base_market_price * self.flexibility
+        counter_offer = max(context.min_acceptable_price, int(buyer_price + decrease_amount))
+
+        if context.current_round >= context.max_rounds:
+            counter_offer = max(context.min_acceptable_price, int(buyer_price * 1.02))
+
+        return DealStatus.ONGOING, counter_offer, (
+            f"I appreciate your proposal of ₹{buyer_price:,}, but given the quality, "
+            f"I can offer ₹{counter_offer:,}. "
+            f"I want to ensure we both benefit."
+        )
+
+    def get_personality_prompt(self) -> str:
+        return (
+            f"I am embodying Sundar Pichai’s seller negotiation style — "
+            f"{self.personality['negotiation_style']}. "
+            f"My tone is calm, fair, and seeks sustainable agreements."
+        )
+
+
+# ------------------ Standalone Test Mode ------------------
+
+if __name__ == "__main__":
+    # Ensure personality file exists
+    if not os.path.exists("seller_personality_config.json"):
+        with open("seller_personality_config.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "negotiation_style": "Strategic, composed, focused on sustainable profit and fairness."
+            }, f, indent=4)
+
+    # Setup product and context
+    product = Product(name="Alphonso Mango", base_market_price=100)
+    context = NegotiationContext(product=product, min_acceptable_price=90, current_round=1, max_rounds=10)
+
+    # Create seller agent
+    seller = YourSellerAgent(name="Sundar Seller")
+
+    print("=== Negotiation Simulation (Standalone Test) ===")
+    print("Persona Prompt:", seller.get_personality_prompt())
+
+    # Opening offer
+    price, message = seller.generate_opening_offer(context)
+    print(f"Round {context.current_round} (Seller Opening): {message}")
+
+    # Simulated buyer offers
+    buyer_offers = [80, 85, 90, 95]
+    for offer in buyer_offers:
+        context.current_round += 1
+        status, counter_price, response = seller.respond_to_buyer_offer(
+            context, offer, f"Buyer offers ₹{offer}"
+        )
+        print(f"Round {context.current_round} (Buyer Offer ₹{offer}): {response}")
+        if status == DealStatus.ACCEPTED:
+            print(f"✅ Deal closed at ₹{counter_price}")
+            break
